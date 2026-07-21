@@ -1,46 +1,53 @@
 # x-spam-auto-block
 
-Auto-block spam users on x.com. The agent drives your Chrome through
+Auto-block spam users on X (x.com) — with a human in the loop.
+
+The agent drives your own Chrome through
 [chrome-devtools-mcp](https://github.com/ChromeDevTools/chrome-devtools-mcp),
-scrapes reply threads, classifies repliers with an OpenAI-compatible LLM
-(DeepSeek v4 flash by default), shows the flagged users in an approval overlay
-**inside the x.com tab**, and blocks only the ones you approve — via the normal
-web UI (profile → ⋯ → Block → confirm).
+scrapes the reply threads under your posts, classifies repliers with an
+OpenAI-compatible LLM (DeepSeek v4 flash by default), then shows the flagged
+accounts in an approval overlay **inside the x.com tab**. Only the users you
+tick and confirm get blocked — via the normal profile UI
+(⋯ → Block → confirm), exactly as if you clicked it yourself.
+
+Promoted content (ads injected into threads) is excluded, and nothing is ever
+blocked without your explicit click in the browser.
 
 ## Prerequisites
 
-- Node.js ≥ 20.19 (chrome-devtools-mcp requirement)
-- Google Chrome
+- Node.js ≥ 20.19
+- Google Chrome (144+ for the default attach mode)
 - An API key for any OpenAI-compatible provider (DeepSeek by default)
 
 ## Setup
 
-1. **Install dependencies**
+```sh
+npm install
+cp .env.example .env    # then fill in LLM_API_KEY and X_USERNAME
+```
 
-   ```sh
-   npm install
-   ```
+`.env` is gitignored — your key never leaves your machine.
 
-2. **Start Chrome with remote debugging**
+### Connect to Chrome
 
-   ```sh
-   ./scripts/launch-chrome.sh
-   ```
+**Mode `auto` (default, recommended)** — attaches to your already-running
+Chrome with your normal profile and existing x.com login:
 
-   Chrome 136+ blocks remote debugging on your default profile, so this opens a
-   dedicated persistent profile (`~/.chrome-debug-profile`). Log into x.com in
-   that window once — the session sticks for future runs.
+1. In Chrome, open `chrome://inspect/#remote-debugging` and enable remote
+   debugging (one-time toggle, no restart).
+2. That's it. On the first run Chrome shows a permission dialog — click
+   **Allow**.
 
-3. **Configure the environment**
+**Mode `url`** — if you prefer an isolated browser, set `CHROME_CONNECT=url`
+in `.env` and start a dedicated debug-profile Chrome:
 
-   ```sh
-   cp .env.example .env
-   ```
+```sh
+./scripts/launch-chrome.sh
+```
 
-   Fill in `LLM_API_KEY` and `X_USERNAME`. The defaults use DeepSeek
-   (`https://api.deepseek.com`, model `deepseek-v4-flash`); point
-   `LLM_API_BASE` / `LLM_MODEL` at any other OpenAI-compatible provider if you
-   prefer. `.env` is gitignored — never commit it.
+Log into x.com in that window once; the profile (`~/.chrome-debug-profile`)
+persists. (This exists because Chrome 136+ refuses the
+`--remote-debugging-port` flag on your default profile.)
 
 ## Usage
 
@@ -51,7 +58,7 @@ npm start
 # Scan your 2 most recent posts
 npm start -- --posts 2
 
-# Scan whatever x.com page is currently open in the debug Chrome
+# Scan whatever x.com page is currently open in Chrome
 npm start -- --current
 
 # Scan specific post threads
@@ -61,24 +68,51 @@ npm start -- https://x.com/you/status/123456789
 npm start -- --current --dry-run
 ```
 
-## How it works
+A typical run:
 
-1. **Scrape** — reads reply threads through the DevTools a11y/DOM interface
-   using x.com's stable `data-testid` attributes, scrolling until the per-post
-   cap (`MAX_REPLIES_PER_POST`) or the end of the thread.
-2. **Classify** — batches repliers to the LLM with strict JSON output; users
-   flagged as spam with confidence ≥ 0.7 go to review.
-3. **Approve** — an overlay is injected into the x.com tab listing each flagged
-   user (handle, confidence, reason, sample reply) with checkboxes. Nothing is
-   blocked until you click **Block selected**; **Cancel** (or a 5-minute
-   timeout) aborts.
-4. **Block** — for each approved user, opens their profile and clicks
-   ⋯ → Block → confirm, verifying the profile reflects the block. Results are
-   appended to `blocked-log.json` (gitignored).
+```
+Connecting to Chrome via chrome-devtools-mcp (attaching to running instance)...
+Collecting candidates...
+  scanning replies of https://x.com/you/status/…
+Collected 10 unique users.
+Classifying with deepseek-v4-flash @ https://api.deepseek.com...
+Flagged 1 suspected spam user(s):
+  @SomeSpamBot (95%) — Promotional display name advertising credit card
+  waiting for your decision in the browser overlay...
+✓ blocked @SomeSpamBot
+Done: 1 blocked, 0 failed.
+```
 
-## Notes
+## Configuration
 
-- The agent only ever blocks users you approved in the overlay; there is no
-  fully unattended mode.
-- If x.com changes its `data-testid` attributes, the selectors in
-  `src/scrape.ts` / `src/block.ts` are the place to fix.
+All settings live in `.env` (see `.env.example` for the documented template):
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `LLM_API_BASE` | `https://api.deepseek.com` | Any OpenAI-compatible endpoint |
+| `LLM_API_KEY` | — (required) | API key for that endpoint |
+| `LLM_MODEL` | `deepseek-v4-flash` | Model id |
+| `X_USERNAME` | — (required) | Your handle; whose posts to scan, never flagged |
+| `CHROME_CONNECT` | `auto` | `auto` = attach to running Chrome, `url` = debug-profile Chrome |
+| `CHROME_DEBUG_URL` | `http://127.0.0.1:9222` | DevTools endpoint (mode `url` only) |
+| `MAX_POSTS` | `5` | Recent posts to scan |
+| `MAX_REPLIES_PER_POST` | `100` | Scroll cap per thread |
+
+## Safety model
+
+- **Nothing is blocked automatically.** The LLM only *proposes*; every block
+  requires you to tick the account and click **Block selected** in the
+  in-page overlay. Cancel — or 5 minutes of inactivity — aborts the run.
+- Blocking goes through x.com's normal web UI in your own session, so it is
+  identical to blocking manually, and reversible the same way (unblock on the
+  profile).
+- Every block is appended to `blocked-log.json` (gitignored) with the handle,
+  the classifier's reason, and a timestamp.
+- Only handles and public reply texts are sent to the LLM provider.
+
+See [docs/how-it-works.md](docs/how-it-works.md) for the architecture and the
+details of each stage.
+
+## License
+
+[MIT](LICENSE) © 2026 Max Lv

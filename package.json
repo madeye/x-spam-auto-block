@@ -4,6 +4,8 @@
   "description": "Auto-block spam users on x.com via chrome-devtools-mcp, with LLM spam detection and in-browser approval",
   "type": "module",
   "private": true,
+  "license": "MIT",
+  "author": "Max Lv",
   "engines": {
     "node": ">=20.19"
   },
