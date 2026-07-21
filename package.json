@@ -1,0 +1,25 @@
+{
+  "name": "x-spam-auto-block",
+  "version": "0.1.0",
+  "description": "Auto-block spam users on x.com via chrome-devtools-mcp, with LLM spam detection and in-browser approval",
+  "type": "module",
+  "private": true,
+  "engines": {
+    "node": ">=20.19"
+  },
+  "scripts": {
+    "start": "tsx src/index.ts",
+    "build": "tsc",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "dotenv": "^16.4.0",
+    "openai": "^4.70.0",
+    "zod": "^3.23.0"
+  },
+  "devDependencies": {
+    "tsx": "^4.19.0",
+    "typescript": "^5.6.0"
+  }
+}
