@@ -54,8 +54,10 @@ async function main(): Promise<void> {
   const args = parseArgs(process.argv.slice(2));
   const config = loadConfig();
 
-  console.log("Connecting to Chrome via chrome-devtools-mcp...");
-  const mcp = await ChromeMcp.connect(config.CHROME_DEBUG_URL);
+  console.log(
+    `Connecting to Chrome via chrome-devtools-mcp (${config.CHROME_CONNECT === "auto" ? "attaching to running instance" : config.CHROME_DEBUG_URL})...`,
+  );
+  const mcp = await ChromeMcp.connect(config.CHROME_CONNECT, config.CHROME_DEBUG_URL);
 
   try {
     console.log("Collecting candidates...");

@@ -9,6 +9,7 @@ const EnvSchema = z.object({
     .string()
     .min(1, "X_USERNAME is required")
     .transform((s) => s.replace(/^@/, "")),
+  CHROME_CONNECT: z.enum(["auto", "url"]).default("auto"),
   CHROME_DEBUG_URL: z.string().url().default("http://127.0.0.1:9222"),
   MAX_POSTS: z.coerce.number().int().positive().default(5),
   MAX_REPLIES_PER_POST: z.coerce.number().int().positive().default(100),

@@ -21,10 +21,12 @@ export async function blockUsers(
   );
   const results: BlockResult[] = [];
 
+  let first = true;
   for (const handle of approved) {
     console.log(`  blocking @${handle}...`);
     try {
-      await blockOne(mcp, handle);
+      await blockOne(mcp, handle, first);
+      first = false;
       results.push({ handle, blocked: true });
       logBlock(handle, reasonByHandle.get(handle.toLowerCase()) ?? "");
       console.log(`  ✓ blocked @${handle}`);
@@ -38,10 +40,14 @@ export async function blockUsers(
   return results;
 }
 
-async function blockOne(mcp: ChromeMcp, handle: string): Promise<void> {
-  await mcp.navigate(`https://x.com/${handle}`);
+async function blockOne(mcp: ChromeMcp, handle: string, openNewTab: boolean): Promise<void> {
+  // First profile opens in a fresh tab so we don't navigate away from the
+  // page the user approved on; subsequent profiles reuse that tab.
+  if (openNewTab) await mcp.newPage(`https://x.com/${handle}`);
+  else await mcp.navigate(`https://x.com/${handle}`);
   const loaded = await mcp.waitFor(`@${handle}`, 15000);
   if (!loaded) throw new Error("profile page did not load");
+  await mcp.waitForSelector('button[data-testid="userActions"]', 10000);
 
   // Already blocked? The profile then shows a "Blocked" button instead of "Follow".
   const alreadyBlocked = await mcp.evaluate<boolean>(

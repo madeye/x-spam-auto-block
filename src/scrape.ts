@@ -19,8 +19,18 @@ interface RawReply {
  * display name, and text using x.com's stable data-testid attributes.
  */
 const EXTRACT_REPLIES_JS = `
+  const AD_LABELS = new Set(['Ad', 'Promoted', '广告', '推广', 'プロモーション']);
+  const isAd = (article) => {
+    if (article.closest('[data-testid="placementTracking"]')) return true;
+    for (const span of article.querySelectorAll('span')) {
+      if (span.closest('[data-testid="tweetText"]')) continue;
+      if (AD_LABELS.has(span.textContent.trim())) return true;
+    }
+    return false;
+  };
   const out = [];
   for (const article of document.querySelectorAll('article[data-testid="tweet"]')) {
+    if (isAd(article)) continue;
     const userName = article.querySelector('[data-testid="User-Name"]');
     if (!userName) continue;
     const handleLink = Array.from(userName.querySelectorAll('a[href^="/"]'))
@@ -51,6 +61,7 @@ async function collectFromCurrentPage(
   maxReplies: number,
 ): Promise<Map<string, Candidate>> {
   const found = new Map<string, Candidate>();
+  await mcp.waitForSelector('article[data-testid="tweet"]');
   let staleRounds = 0;
   while (found.size < maxReplies && staleRounds < 2) {
     const before = totalTexts(found);
@@ -80,8 +91,14 @@ export async function collectFromOwnPosts(
   config: Config,
   maxPosts: number,
 ): Promise<Candidate[]> {
-  await mcp.navigate(`https://x.com/${config.X_USERNAME}`);
+  // Work in a fresh tab so we never navigate away from what the user is viewing.
+  await mcp.newPage(`https://x.com/${config.X_USERNAME}`);
   await mcp.waitFor(`@${config.X_USERNAME}`);
+  // The header renders before the timeline — wait for actual posts.
+  if (!(await mcp.waitForSelector('article[data-testid="tweet"]'))) {
+    console.warn("  no posts appeared on the profile page within 10s");
+    return [];
+  }
 
   const postLinks = await mcp.evaluate<string[]>(`
     const links = new Set();
@@ -128,9 +145,13 @@ export async function collectFromUrls(
   urls: string[],
 ): Promise<Candidate[]> {
   const merged = new Map<string, Candidate>();
+  let first = true;
   for (const url of urls) {
     console.log(`  scanning replies of ${url}`);
-    await mcp.navigate(url);
+    // First URL opens a fresh work tab; later ones reuse it.
+    if (first) await mcp.newPage(url);
+    else await mcp.navigate(url);
+    first = false;
     await sleep(2000);
     const found = await collectFromCurrentPage(mcp, url, config.MAX_REPLIES_PER_POST);
     mergeInto(merged, found);

@@ -11,10 +11,12 @@ export class ChromeMcp {
     this.client = client;
   }
 
-  static async connect(chromeDebugUrl: string): Promise<ChromeMcp> {
+  static async connect(mode: "auto" | "url", chromeDebugUrl: string): Promise<ChromeMcp> {
+    const connectArg =
+      mode === "auto" ? "--autoConnect" : `--browser-url=${chromeDebugUrl}`;
     const transport = new StdioClientTransport({
       command: "npx",
-      args: ["-y", "chrome-devtools-mcp@latest", `--browser-url=${chromeDebugUrl}`],
+      args: ["-y", "chrome-devtools-mcp@latest", connectArg],
       stderr: "ignore",
     });
     const client = new Client({ name: "x-spam-auto-block", version: "0.1.0" });
@@ -25,10 +27,12 @@ export class ChromeMcp {
       await mcp.call("list_pages", {});
     } catch (err) {
       await client.close().catch(() => {});
+      const hint =
+        mode === "auto"
+          ? `Could not attach to your running Chrome. Enable remote debugging once at chrome://inspect/#remote-debugging (Chrome 144+), or set CHROME_CONNECT=url and start Chrome with scripts/launch-chrome.sh.`
+          : `Could not attach to Chrome at ${chromeDebugUrl}. Start it with scripts/launch-chrome.sh and log into x.com there once.`;
       throw new Error(
-        `Could not attach to Chrome at ${chromeDebugUrl}. ` +
-          `Start it with scripts/launch-chrome.sh and log into x.com there once.\n` +
-          `Underlying error: ${err instanceof Error ? err.message : String(err)}`,
+        `${hint}\nUnderlying error: ${err instanceof Error ? err.message : String(err)}`,
       );
     }
     return mcp;
@@ -49,6 +53,11 @@ export class ChromeMcp {
 
   async navigate(url: string): Promise<void> {
     await this.call("navigate_page", { type: "url", url });
+  }
+
+  /** Open a new tab at `url`; it becomes the selected page for later calls. */
+  async newPage(url: string): Promise<void> {
+    await this.call("new_page", { url });
   }
 
   /**
@@ -78,6 +87,19 @@ export class ChromeMcp {
     } catch {
       return false;
     }
+  }
+
+  /** Poll until `selector` matches at least `minCount` elements. Returns false on timeout. */
+  async waitForSelector(selector: string, timeoutMs = 10000, minCount = 1): Promise<boolean> {
+    const deadline = Date.now() + timeoutMs;
+    while (Date.now() < deadline) {
+      const count = await this.evaluate<number>(
+        `return document.querySelectorAll(${JSON.stringify(selector)}).length;`,
+      );
+      if (count >= minCount) return true;
+      await new Promise((resolve) => setTimeout(resolve, 500));
+    }
+    return false;
   }
 
   async snapshot(): Promise<string> {
