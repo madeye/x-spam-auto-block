@@ -110,6 +110,14 @@ All settings live in `.env` (see `.env.example` for the documented template):
   the classifier's reason, and a timestamp.
 - Only handles and public reply texts are sent to the LLM provider.
 
+> [!WARNING]
+> **Pace yourself.** X's anti-bot systems flag bursts of blocks, and accounts
+> that have been restricted before get far less tolerance — users have
+> reported bans even for small batches after a first restriction
+> ([#1](https://github.com/madeye/x-spam-auto-block/issues/1)). Keep batches
+> small, leave time between runs, and stop entirely if your account has ever
+> been restricted.
+
 See [docs/how-it-works.md](docs/how-it-works.md) for the architecture and the
 details of each stage.
 
